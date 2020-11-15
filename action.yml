@@ -1,0 +1,95 @@
+name: 'Test ActiveMQ Artemis Operator'
+description: 'Test ActiveMQ Artemis Operator'
+inputs:
+  module:
+    description: 'The test suite module name'
+    required: true
+    default: 'github.com/artemiscloud/activemq-artemis-operator-test-suite'
+  repository:
+    description: 'The test suite repository'
+    required: true
+    default: 'https://github.com/artemiscloud/activemq-artemis-operator-test-suite.git'
+  ref:
+    description: 'The test suite reference'
+    required: true
+    default: 'main'
+  test-packages:
+    description: 'The tests path'
+    required: true
+    default: 'test/...'
+  docker-images:
+    description: 'The docker images to load'
+    required: true
+    default: ''
+  broker-name:
+    description: 'The ActiveMQ Artemis Broker name'
+    required: true
+    default: 'activemq-artemis'
+  broker-image:
+    description: 'The ActiveMQ Artemis Broker image'
+    required: true
+    default: 'quay.io/artemiscloud/activemq-artemis-broker-kubernetes:dev.latest'
+  broker-update-image:
+    description: 'The ActiveMQ Artemis Broker update image'
+    required: true
+    default: 'quay.io/artemiscloud/activemq-artemis-broker-kubernetes:dev.latest'
+  operator-image:
+    description: 'The ActiveMQ Artemis Operator image'
+    required: true
+    default: 'quay.io/artemiscloud/activemq-artemis-operator:dev.latest'
+  operator-deploy-path:
+    description: 'The ActiveMQ Artemis Operator deploy path'
+    required: true
+    default: ''
+runs:
+  using: "composite"
+  steps: 
+    - name: Checkout the activemq-artemis-operator-test-suite
+      run: |
+        git clone ${{ inputs.repository }} ${{ github.action_path }}/go/src/${{ inputs.module }}
+        git -C ${{ github.action_path }}/go/src/${{ inputs.module }} checkout ${{ inputs.ref }}
+      shell: bash
+    - name: Set up deploy directory
+      run: |
+        if [ -n "${{ inputs.operator-deploy-path }}" ]
+        then
+          cp -r ${{ inputs.operator-deploy-path }} ${{ github.action_path }}/deploy
+        else
+          git clone https://github.com/artemiscloud/activemq-artemis-operator.git ${{ github.action_path }}/activemq-artemis-operator
+          cp -r ${{ github.action_path }}/activemq-artemis-operator/deploy ${{ github.action_path }}/deploy
+        fi
+        sed -i 's/imagePullPolicy:.*/imagePullPolicy: IfNotPresent/g' ${{ github.action_path }}/deploy/operator.yaml 
+      shell: bash
+    - name: Install Ginkgo
+      run: go get github.com/onsi/ginkgo/ginkgo
+      shell: bash
+    - name: Install kind
+      run: GO111MODULE="on" go get sigs.k8s.io/kind@v0.9.0
+      shell: bash
+    - name: Set up Kubernetes cluster
+      run: $(go env GOPATH)/bin/kind create cluster
+      shell: bash
+    - name: Load docker images
+      run: |
+        if [ -n "${{ inputs.docker-images }}" ]
+        then
+          for DOCKER_IMAGE in $(echo ${{ inputs.docker-images }} | sed "s/,/ /g")
+          do
+            $(go env GOPATH)/bin/kind load docker-image $DOCKER_IMAGE
+          done
+        fi
+      shell: bash
+    - name: Execute tests
+      run: |
+        export GOBIN=$(go env GOPATH)/bin
+        export GOPATH=${{ github.action_path }}/go
+        export KUBECONFIG=$HOME/.kube/config
+        $GOBIN/ginkgo -r -keepGoing ${{ inputs.test-packages }} -- \
+        -broker-name ${{ inputs.broker-name }} \
+        -broker-image ${{ inputs.broker-image }} \
+        -broker-image-second ${{ inputs.broker-update-image }} \
+        -operator-image ${{ inputs.operator-image }} \
+        -repository ${{ github.action_path }}/deploy \
+        -v2 -debug-run 
+      shell: bash
+      working-directory: ${{ github.action_path }}/go/src/${{ inputs.module }}
