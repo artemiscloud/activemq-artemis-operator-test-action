@@ -64,7 +64,7 @@ runs:
       run: go get github.com/onsi/ginkgo/ginkgo
       shell: bash
     - name: Install kind
-      run: GO111MODULE="on" go get sigs.k8s.io/kind@v0.9.0
+      run: GO111MODULE="on" go get sigs.k8s.io/kind@v0.11.1
       shell: bash
     - name: Set up Kubernetes cluster
       run: $(go env GOPATH)/bin/kind create cluster
