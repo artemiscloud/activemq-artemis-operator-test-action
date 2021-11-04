@@ -24,6 +24,4 @@ jobs:
       - name: Execute the test suite
         uses: ./
         with:
-          repository: 'https://github.com/brusdev/activemq-artemis-operator-test-suite.git'
-          ref: 'dev'
           test-packages: 'test/smoke/basic/...'
