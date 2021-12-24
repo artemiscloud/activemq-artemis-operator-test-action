@@ -61,10 +61,10 @@ runs:
         sed -i 's/imagePullPolicy:.*/imagePullPolicy: IfNotPresent/g' ${{ github.action_path }}/deploy/operator.yaml 
       shell: bash
     - name: Install Ginkgo
-      run: go get github.com/onsi/ginkgo/ginkgo
+      run: go install github.com/onsi/ginkgo/ginkgo@v1.16.5
       shell: bash
     - name: Install kind
-      run: GO111MODULE="on" go get sigs.k8s.io/kind@v0.11.1
+      run: go install sigs.k8s.io/kind@v0.11.1
       shell: bash
     - name: Set up Kubernetes cluster
       run: $(go env GOPATH)/bin/kind create cluster
@@ -81,6 +81,7 @@ runs:
       shell: bash
     - name: Execute tests
       run: |
+        export ACK_GINKGO_RC=true
         export GOBIN=$(go env GOPATH)/bin
         export GOPATH=${{ github.action_path }}/go
         export KUBECONFIG=$HOME/.kube/config
@@ -90,6 +91,10 @@ runs:
         -broker-image-second ${{ inputs.broker-update-image }} \
         -operator-image ${{ inputs.operator-image }} \
         -repository ${{ github.action_path }}/deploy \
-        -v2 -debug-run 
+        -v2 -debug-run || export GINKGO_EXIT_CODE=$?
+        if [[ "$GINKGO_EXIT_CODE" != "0" ]]; then
+          echo "For instructions on using the test-suite visit https://github.com/artemiscloud/activemq-artemis-operator-test-suite"
+          exit $GINKGO_EXIT_CODE
+        fi
       shell: bash
       working-directory: ${{ github.action_path }}/go/src/${{ inputs.module }}
